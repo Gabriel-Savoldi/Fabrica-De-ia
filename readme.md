@@ -275,6 +275,16 @@ Quando a autenticação por chave estiver habilitada no 9Router, crie a variáve
 
 O nome do combo identifica o roteamento. O custo e as cotas dependem dos modelos e provedores que você incluir. O mesmo combo atende os seis papéis, e diferentes papéis podem ser atendidos pelo mesmo modelo.
 
+### Diagnosticar uma delegação que falhou
+
+O teste de conexão do painel verifica a credencial ou o acesso ao catálogo. Ele não executa o fluxo de ferramentas do Codex nem garante cota disponível para uma geração. Um modelo precisa atender ao pedido e oferecer suporte às ferramentas usadas pelo especialista.
+
+Quando `codex exec` termina com erro, o lançador mostra as últimas 40 linhas e informa o caminho de um log completo do CLI em `%TEMP%`, fora do repositório. Antes de preservar esse arquivo, ele remove a chave efetiva do roteador e padrões comuns de credenciais. Na execução bem-sucedida, o arquivo temporário é removido. Examine o log localmente e revise seu conteúdo antes de compartilhá-lo; ele também pode conter trechos dos documentos lidos pelo especialista.
+
+O log registra o que o CLI recebeu. Se o 9Router retornar apenas o erro de um destino depois do fallback, esse arquivo não recupera os erros que o roteador descartou. Um HTTP 410 de modelo indisponível pode aparecer junto de falhas de cota ou de ferramentas em outros destinos. Confira também os registros e o estado dos provedores no painel.
+
+No OpenRouter, variantes gratuitas podem compartilhar uma cota diária. Trocar entre modelos `:free` não reinicia esse limite. A consulta autenticada `GET https://openrouter.ai/api/v1/key`, feita com a chave do **OpenRouter**, permite conferir `free_model_daily_requests`, quando disponível; a chave local do 9Router não autentica essa consulta. Confira `used`, `limit` e `remaining` e, em caso de esgotamento, aguarde a renovação indicada pelo provedor. Os limites dependem da conta e podem mudar. [Limites oficiais do OpenRouter](https://openrouter.ai/docs/api/reference/limits)
+
 ## Rodar a primeira feature pelo VS Code
 
 Com a constituição aprovada, a preparação salva e publicada, o `gh` autenticado e o 9Router disponível, abra uma conversa local da extensão Codex na raiz do projeto. O modelo selecionado nessa conversa será o orquestrador.

@@ -12,6 +12,7 @@ param(
     [string] $Handoff
 )
 
+$preferenciaErroOriginal = $ErrorActionPreference
 $ErrorActionPreference = 'Stop'
 $raiz = Split-Path -Parent $PSScriptRoot
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $raiz 'src/9router.json') | ConvertFrom-Json
@@ -63,7 +64,9 @@ $opcoes = @(
 
 # O modo local do 9Router aceita um valor de teste quando a chave esta desativada.
 $chaveOriginal = $env:FABRICA_9ROUTER_API_KEY
+$codificacaoOriginal = $OutputEncoding
 $log = [System.IO.Path]::GetTempFileName()
+$preservarLog = $false
 try {
     if ([string]::IsNullOrWhiteSpace($chaveOriginal)) {
         $env:FABRICA_9ROUTER_API_KEY = 'local-sem-chave'
@@ -71,18 +74,35 @@ try {
     $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
     # O CLI envia o progresso para stderr e o resultado final para stdout.
     $ErrorActionPreference = 'Continue'
+    $global:LASTEXITCODE = $null
     $mensagem | & $cli.Source @opcoes 2> $log
-    $codigo = $LASTEXITCODE
+    $codigo = $global:LASTEXITCODE
     $ErrorActionPreference = 'Stop'
-    if ($codigo -ne 0) {
-        $detalhe = (Get-Content -LiteralPath $log -Tail 6) -join [Environment]::NewLine
-        if ($chaveOriginal) {
-            $detalhe = $detalhe.Replace($chaveOriginal, '[chave omitida]')
+    if ($null -eq $codigo -or $codigo -ne 0) {
+        # ReadAllText reconhece o BOM do redirecionamento no Windows PowerShell 5.1.
+        $conteudoLog = [System.IO.File]::ReadAllText($log)
+        if ($env:FABRICA_9ROUTER_API_KEY) {
+            $conteudoLog = $conteudoLog.Replace($env:FABRICA_9ROUTER_API_KEY, '[chave omitida]')
         }
-        throw "Falha na chamada ao 9Router (codex exec, codigo $codigo). $detalhe"
+        $conteudoLog = [regex]::Replace($conteudoLog, '(?i)\bBearer\s+[^\s"''<>]+', 'Bearer [chave omitida]')
+        $conteudoLog = [regex]::Replace($conteudoLog, '\b(?:sk-[A-Za-z0-9_-]{8,}|nvapi-[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]+)\b', '[chave omitida]')
+        [System.IO.File]::WriteAllText($log, $conteudoLog, [System.Text.UTF8Encoding]::new($false))
+        $preservarLog = $true
+        $detalhe = ($conteudoLog -split '\r?\n' | Select-Object -Last 40) -join [Environment]::NewLine
+        if ($conteudoLog -match '(?i)\b429\b|free-models-per-day|quota.{0,24}exceed|rate.limit.{0,24}exceed') {
+            $orientacao = 'Ha indicacao de limite/cota no log. Aguarde a renovacao informada pelo provedor antes de repetir. Modelos gratuitos podem compartilhar a mesma cota; trocar de modelo nao necessariamente a renova.'
+        } else {
+            $orientacao = 'O erro final de um combo pode ocultar falhas de outros destinos, incluindo cota, ferramentas ou autenticacao. Confira os registros do roteador; um HTTP 410 isolado nao identifica todas as causas.'
+        }
+        $codigoExibido = if ($null -eq $codigo) { 'nao informado pelo processo' } else { $codigo }
+        throw "Falha na chamada ao 9Router (codex exec, codigo $codigoExibido). $orientacao`nLog completo do CLI, sanitizado e fora do repositorio: $log`nUltimas linhas:`n$detalhe"
     }
 }
 finally {
     $env:FABRICA_9ROUTER_API_KEY = $chaveOriginal
-    Remove-Item -LiteralPath $log
+    $OutputEncoding = $codificacaoOriginal
+    $ErrorActionPreference = $preferenciaErroOriginal
+    if (!$preservarLog) {
+        Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
+    }
 }
