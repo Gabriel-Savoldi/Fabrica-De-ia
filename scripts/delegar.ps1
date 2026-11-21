@@ -47,9 +47,11 @@ $instrucoes = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $raiz "src
 $mensagem = "Papel delegado: $Papel`n`n$instrucoes`n`n## Handoff do orquestrador`n$Handoff"
 $opcoes = @(
     'exec', '--ephemeral', '--cd', $raiz, '--model', $config.modelo,
-'-c', "default_permissions=fabrica-$Papel",
-'-c', 'approval_policy=never',
-    '-c', 'agents.enabled=false',
+    '-c', "default_permissions=fabrica-$Papel",
+    '-c', 'approval_policy=never',
+    '-c', 'features.multi_agent=false',
+    '-c', 'features.multi_agent_v2=false',
+    '-c', 'model_reasoning_effort=medium',
     '-c', 'model_provider=fabrica_9router',
     '-c', 'model_providers.fabrica_9router.name=9Router',
     '-c', "model_providers.fabrica_9router.base_url=$($config.base_url)",
@@ -79,7 +81,8 @@ try {
         }
         throw "Falha na chamada ao 9Router (codex exec, codigo $codigo). $detalhe"
     }
-} finally {
+}
+finally {
     $env:FABRICA_9ROUTER_API_KEY = $chaveOriginal
     Remove-Item -LiteralPath $log
 }
