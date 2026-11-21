@@ -1,0 +1,71 @@
+approval_policy = "on-request"
+default_permissions = "fabrica-orquestrador"
+
+[permissions.fabrica-orquestrador]
+description = "Orquestrador da fábrica de software."
+extends = ":read-only"
+
+[permissions.fabrica-analista-requisitos]
+description = "Especificação e esclarecimentos de requisitos."
+extends = ":read-only"
+
+[permissions.fabrica-analista-requisitos.filesystem]
+":tmpdir" = "write"
+
+[permissions.fabrica-analista-requisitos.filesystem.":workspace_roots"]
+"specs" = "write"
+".specify/feature.json" = "write"
+
+
+[permissions.fabrica-arquiteto]
+description = "Plano técnico e documentação da arquitetura."
+extends = ":read-only"
+
+[permissions.fabrica-arquiteto.filesystem]
+":tmpdir" = "write"
+
+[permissions.fabrica-arquiteto.filesystem.":workspace_roots"]
+"specs" = "write"
+"AGENTS.md" = "write"
+
+[permissions.fabrica-criador-tarefas]
+description = "Decomposição do plano em tarefas."
+extends = ":read-only"
+
+[permissions.fabrica-criador-tarefas.filesystem]
+":tmpdir" = "write"
+
+
+[permissions.fabrica-revisor-codigo]
+description = "Revisão do código e emissão do parecer."
+extends = ":read-only"
+
+[permissions.fabrica-revisor-codigo.filesystem]
+":tmpdir" = "write"
+
+[permissions.fabrica-desenvolvedor]
+description = "Implementação do código e dos testes unitários."
+extends = ":workspace"
+
+[permissions.fabrica-desenvolvedor.filesystem.":workspace_roots"]
+"specs" = "read"
+".specify" = "read"
+"AGENTS.md" = "read"
+"scripts/delegar.ps1" = "read"
+"src/9router.json" = "read"
+"src/orquestrador.md" = "read"
+"src/subagent-analista-requisitos.md" = "read"
+"src/subagent-arquiteto.md" = "read"
+"src/subagent-criador-tarefas.md" = "read"
+"src/subagent-desenvolvedor.md" = "read"
+"src/subagent-revisor-codigo.md" = "read"
+"src/subagent-qa.md" = "read"
+
+
+[permissions.fabrica-qa]
+description = "Testes de aceite e relatório de qualidade."
+extends = ":read-only"
+
+[permissions.fabrica-qa.filesystem]
+":tmpdir" = "write"
+

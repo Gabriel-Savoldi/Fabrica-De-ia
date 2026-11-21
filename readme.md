@@ -1,424 +1,384 @@
 # Fábrica de Software Agêntica Semi-autônoma
 
-*Material de aula · agentes opencode + GitHub Spec Kit*
+**Projeto Final 4 · OpenAI Codex no VS Code · 9Router · GitHub Spec Kit**
 
-Um orquestrador conduz uma feature da ideia ao pull request, acionando seis subagentes especializados, um de cada vez. O humano só entra em dois pontos: aprovar a especificação e fazer o merge.
+Esta é a adaptação da fábrica apresentada na disciplina para o OpenAI Codex. Você descreve uma funcionalidade no chat da extensão do VS Code. O Codex coordena seis especialistas, confere suas entregas e conduz o trabalho até um pull request (PR). Você aprova a especificação e faz o merge no GitHub. O material do professor está na [página da aula](src/fabrica-aula.html).
 
-## Quem participa
+## Situação da preparação
 
-O orquestrador é o único dono do fluxo. Ele monta o handoff (a passagem de bastão: a mensagem com tudo o que o subagente precisa saber para executar a sua etapa, já que ele começa sem nenhum contexto), troca para a branch da feature, aciona um subagente e espera o bloco de status. Os subagentes nunca chamam uns aos outros e nunca fazem commit.
+Registro da preparação em **21/11/2026**.
 
-```mermaid
-flowchart TB
-    H["Humano<br/><small>aprova spec · faz merge</small>"]
-    O["Orquestrador<br/><small>valida no disco, decide</small>"]
-    D[("Disco e Git<br/><small>specs/#lt;feature#gt;/ · branch</small>")]
+| Item | Situação registrada |
+| --- | --- |
+| `uv` | Instalação e comando de versão confirmados no terminal do VS Code |
+| Codex CLI | Instalação confirmada após a mensagem `codex not found` |
+| Spec Kit | Versão **1.4.3**, registrada também em `.specify/init-options.json` |
+| Inicialização | Comando concluído com a mensagem **Project ready** |
+| Skills | Instaladas em `.agents/skills/speckit-*/SKILL.md` |
+| Constituição | Proposta **1.0.0**, com sete princípios e `TODO(RATIFICATION_DATE)` pendente |
+| 9Router | Combo `combo-free` e endereço `http://localhost:20128/v1` no arquivo de configuração |
+| Git | Branch atual `main`, com a preparação ainda por salvar em commit |
+| GitHub | Remoto `origin` ainda por configurar nesta cópia. Autenticação do `gh` a conferir |
+| Execução da fábrica | Primeira feature e integração de ponta a ponta com o 9Router aguardam validação |
 
-    A["Analista de Requisitos<br/><small>spec.md</small>"]
-    R["Arquiteto<br/><small>plan.md</small>"]
-    T["Criador de Tarefas<br/><small>tasks.md</small>"]
-    DEV["Desenvolvedor<br/><small>código + testes unit.</small>"]
-    REV["Revisor de Código<br/><small>review-report.md</small>"]
-    QA["QA<br/><small>qa-report.md</small>"]
+**Para continuar desta situação, siga a [aprovação da constituição](#aprovar-a-proposta) e a [preparação do GitHub](#preparar-git-e-github).** As instruções de instalação abaixo servem também para preparar outra máquina.
 
-    H <-->|"Checkpoints 1 e 2<br/>(e bloqueios reais)"| O
-    O <-->|"handoff → / ← STATUS"| A
-    O <-->|"ask"| R
-    O <--> T
-    O <--> DEV
-    O <--> REV
-    O <--> QA
-    O -->|"grava state.json,<br/>commit, push, PR"| D
+## Como o projeto funciona
 
-    classDef hum fill:#fde7d3,stroke:#d9822b,color:#1a1a1a
-    classDef orq fill:#dbe8fb,stroke:#3b6fc4,color:#1a1a1a
-    classDef sub fill:#eeeeee,stroke:#888888,color:#1a1a1a
-    class H hum
-    class O orq
-    class A,R,T,DEV,REV,QA sub
-    classDef disk fill:#e8e2d4,stroke:#8a7a55,color:#1a1a1a
-    class D disk
-```
-
-Todas as setas passam pelo orquestrador: ele envia o handoff e recebe de volta o bloco `STATUS`. A chamada ao Arquiteto está marcada como `ask`, então o ambiente pede confirmação ao humano antes dela (segunda barreira do Checkpoint 1).
-
-## O fluxo de E0 a E8
-
-Cada etapa só avança quando o orquestrador confirma o critério de avanço no disco: o arquivo existe, os testes rodaram e saíram com código 0. O relato do subagente não basta. As setas tracejadas são devoluções: o trabalho volta para quem pode corrigi-lo (máximo de 2 por etapa).
+O chat do Codex assume a função de orquestrador ao ler [AGENTS.md](AGENTS.md) e [src/orquestrador.md](src/orquestrador.md). Ele escolhe a etapa, prepara a branch, monta o handoff e espera a resposta de cada especialista. Handoff é a mensagem com o objetivo da etapa, os arquivos de entrada, as decisões já tomadas e o formato da entrega.
 
 ```mermaid
-flowchart TB
-    E0["E0 · Descoberta<br/><small>Orquestrador · git, gh, constituição</small>"]
-    E1["E1 · Especificação<br/><small>Analista · speckit-specify, clarify</small>"]
-    C1["Checkpoint 1 · aprovar a spec<br/><small>humano responde #quot;aprovado#quot;</small>"]
-    subgraph auto ["Zona autônoma · E2 → E7 · sem perguntar ao humano"]
-        E2["E2 · Plano técnico<br/><small>Arquiteto · speckit-plan</small>"]
-        E3["E3 · Tarefas<br/><small>Criador de Tarefas · speckit-tasks</small>"]
-        E35["E3.5 · Análise de consistência<br/><small>Orquestrador · speckit-analyze</small>"]
-        E4["E4 · Implementação<br/><small>Desenvolvedor · uma fase por vez</small>"]
-        E5["E5 · Revisão de código<br/><small>Revisor · git diff do intervalo</small>"]
-        E6["E6 · Teste e aceite<br/><small>QA · executa a suíte de testes</small>"]
-        E7["E7 · PR e CI<br/><small>Orquestrador · push, gh pr create</small>"]
-    end
-    C2["Checkpoint 2 · merge do PR<br/><small>só o humano faz o merge</small>"]
-    OK["ENTREGUE<br/><small>gh pr view → MERGED</small>"]
-
-    E0 --> E1
-    E1 -->|"HUMAN_REVIEW_REQUIRED · para"| C1
-    C1 -->|"mensagem literal do humano"| E2
-    E2 --> E3
-    E3 -->|"plan + tasks commitados"| E35
-    E35 -->|"sem achado CRITICAL"| E4
-    E4 -->|"tasks [X] + comandos saem 0"| E5
-    E5 -->|"sem achado bloqueante"| E6
-    E6 -->|"sem defeito Crítico/Alto"| E7
-    E7 -->|"CI verde · para"| C2
-    C2 -->|"merge feito pelo humano"| OK
-
-    C1 -.->|"ajustes"| E1
-    E35 -.->|"CRITICAL → dono"| E2
-    E5 -.->|"reprovado"| E4
-    E6 -.->|"defeito do QA"| E4
-    E7 -.->|"CI falhou"| E4
-
-    classDef hum fill:#fde7d3,stroke:#d9822b,color:#1a1a1a
-    classDef orq fill:#dbe8fb,stroke:#3b6fc4,color:#1a1a1a
-    classDef sub fill:#eeeeee,stroke:#888888,color:#1a1a1a
-    classDef done fill:#dcf3dc,stroke:#3a9a3a,color:#1a1a1a
-    class C1,C2 hum
-    class E0,E35,E7 orq
-    class E1,E2,E3,E4,E5,E6 sub
-    class OK done
+flowchart TD
+    H["Você no VS Code"] --> O["Codex orquestrador"]
+    O --> S["scripts/delegar.ps1"]
+    S --> C["Codex CLI · codex exec"]
+    C --> R["9Router · combo-free"]
+    R --> E["Um especialista por chamada"]
+    E --> D["Arquivos e testes no repositório"]
+    E --> O
+    O --> D
+    O --> P["PR e resultados para revisão humana"]
 ```
 
-Artefatos de cada etapa:
+O [script de delegação](scripts/delegar.ps1) lê as instruções do papel em `src/subagent-*.md`, junta o handoff e inicia `codex exec` na raiz deste repositório. Cada chamada usa o provedor do 9Router e o combo de [src/9router.json](src/9router.json). O orquestrador confere os arquivos e os comandos de verificação antes de avançar.
 
-| Etapa | Artefatos |
-|---|---|
-| E0 · Descoberta | `constitution.md` · `state.json` |
-| E1 · Especificação | `spec.md` · `checklists/` |
-| Checkpoint 1 | `specification_review` |
-| E2 · Plano técnico | `plan.md` · `research.md` · `quickstart` · `data-model` |
-| E3 · Tarefas | `tasks.md` |
-| E3.5 · Análise de consistência | relatório (só leitura) |
-| E4 · Implementação | código · testes · `[X]` |
-| E5 · Revisão de código | `review-report.md` |
-| E6 · Teste e aceite | `qa-report.md` |
-| E7 · PR e CI | PR · checks da CI |
-| Checkpoint 2 | `merge_approval` |
-| ENTREGUE | `stage: ENTREGUE` |
+As execuções dos especialistas usam `--sandbox workspace-write`, `--ephemeral` e `agents.enabled=false`. O primeiro permite trabalhar nos arquivos do projeto conforme as permissões do ambiente. O segundo evita guardar o histórico da sessão do especialista. O terceiro desativa novas delegações dentro dessa execução. As entregas continuam registradas nos arquivos do repositório.
 
-> **Ponto central para a aula:** todas as correções técnicas voltam ao Desenvolvedor (E4) e depois passam de novo por Revisor e QA. Mudança de requisito volta ao Checkpoint 1. Há limite de 2 devoluções por etapa e de 5 rodadas de correção por feature; ao estourar, o fluxo vira `BLOCKED` e chama o humano.
+As responsabilidades e os caminhos permitidos a cada papel são instruções verificadas pelo orquestrador nas alterações. O script também confere a branch e a aprovação registrada antes das chamadas posteriores à especificação.
 
-## Os dois checkpoints humanos
+A conversa principal usa a conta e o modelo selecionados na extensão. Os especialistas recebem chamadas independentes para usar o 9Router, porque os subagentes nativos do Codex herdam o provedor da conversa principal. Essa ponte foi acrescentada nesta adaptação. [Documentação de subagentes do Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents#custom-agents)
 
-### Checkpoint 1 · fim de E1 — O que vai ser construído
+## O que existe em cada pasta
 
-O orquestrador apresenta a `spec.md` e encerra o turno. Commit não é aprovação. Antes de acionar o Arquiteto, ele precisa citar o trecho literal da mensagem do humano: `Checkpoint 1 aprovado pelo humano: "..."`. Se o humano aprovar mas pedir para não seguir, a aprovação é gravada, o estado fica `ESPECIFICACAO_APROVADA` e o fluxo para; basta pedir para continuar depois.
+| Caminho | Função | Como foi criado |
+| --- | --- | --- |
+| `AGENTS.md` | Entrada das instruções da fábrica para o Codex | Adaptação para o VS Code |
+| `src/orquestrador.md` | Etapas, critérios, checkpoints, handoffs e estado | Agente do professor adaptado |
+| `src/subagent-*.md` | Responsabilidades dos seis especialistas | Agentes do professor adaptados |
+| `src/9router.json` | Endereço da API e nome do combo | Configuração acrescentada na adaptação |
+| `scripts/delegar.ps1` | Chama um especialista com `codex exec` pelo 9Router | Ponte acrescentada na adaptação |
+| `.agents/skills/` | Procedimentos do Spec Kit que o Codex pode seguir | `specify init` |
+| `.specify/scripts/` | Scripts auxiliares usados pelas skills | `specify init` |
+| `.specify/templates/` | Modelos dos documentos de requisitos, plano, tarefas e constituição | `specify init` |
+| `.specify/init-options.json` e `integration.json` | Versão, integração e opções da instalação | `specify init` |
+| `.specify/memory/constitution.md` | Regras gerais do projeto | Modelo instalado e conteúdo preparado por `$speckit-constitution` |
+| `specs/<feature>/` | Especificação, plano, tarefas, estado e relatórios de uma funcionalidade | Surge durante a execução da primeira feature |
 
-### Checkpoint 2 · fim de E7 — O que entra na branch base
+O código do produto será gerado neste mesmo repositório, nos locais definidos pelo plano técnico. O Arquiteto registra os comandos para executar e verificar o produto em `plan.md` e `quickstart.md` da feature.
 
-Com a CI verde, o estado fica `AGUARDANDO_MERGE`. Merge, auto-merge, force push e deploy são proibidos à fábrica. Ao retomar, o orquestrador consulta `gh pr view` para saber se houve merge.
+## Instalar as ferramentas no Windows
 
-## Regras que fazem a fábrica funcionar
+Abra a pasta `fabrica-software-agentica` pelo menu **Arquivo → Abrir Pasta** do VS Code. Use **Terminal → Novo Terminal** para os comandos PowerShell abaixo. Confira com `Get-Location` que o caminho termina nessa pasta.
 
-- **Verificar no disco.** "Concluí" sem arquivo e sem comando executado é etapa não concluída. O orquestrador compara o campo `ARTEFATOS` com o que existe de fato.
-- **Um subagente por vez.** O próximo só é chamado depois de validar o anterior. Subagentes nunca acionam outros subagentes.
-- **Uma branch por spec.** Antes de cada acionamento o orquestrador roda `git switch <branch>` e confere com `git branch --show-current`. Trabalho na branch base reprova a etapa.
-- **Spec Kit é a fonte de verdade.** Artefatos das skills `speckit-*` nunca são apagados, renomeados ou mesclados. A `spec.md` só muda via `speckit-clarify`.
-- **Estado retomável.** `state.json` guarda etapa, contadores de devolução, comandos de verificação e checkpoints. Uma nova sessão retoma da primeira etapa pendente.
-- **Raiz limpa.** Anotações de controle vão para `specs/<feature>/notes/`. Arquivos como `SUMMARY.md` na raiz reprovam a etapa.
+### Instalar uv
 
-## Ciclo de vida no state.json
-
-O campo `stage` percorre esta sequência. Os estados marcados com ⏸ são paradas para o humano (`ESPECIFICACAO_APROVADA` só ocorre quando ele aprova a spec e pede para não seguir).
-
-`NOVA` → `ESPECIFICANDO` → ⏸ `AGUARDANDO_REVISAO_HUMANA` → ⏸ `ESPECIFICACAO_APROVADA` → `PLANEJANDO` → `CRIANDO_TAREFAS` → `ANALISANDO` → `IMPLEMENTANDO` → `REVISANDO` → `TESTANDO` → `PUBLICANDO_PR` → ⏸ `AGUARDANDO_MERGE` → `ENTREGUE`
-
-`BLOCKED` e `CANCELADA` podem ocorrer em qualquer ponto.
-
-## O contrato entre orquestrador e subagente
-
-Todo handoff (a mensagem de acionamento do subagente, como uma passagem de plantão) leva 10 itens: feature e branch, etapa e skill, artefatos de entrada, decisões já ratificadas, pendências a apenas registrar, limite de escopo, local das anotações, comandos de verificação, escopo específico (fase ou apontamentos) e formato de retorno. O retorno é sempre este bloco:
-
-```text
-STATUS: DONE | BLOCKED | NEEDS_CLARIFICATION | HUMAN_REVIEW_REQUIRED
-PARECER: aprovado | aprovado com ressalvas | reprovado   (Revisor e QA)
-ARTEFATOS: caminhos criados/alterados, um por linha
-TESTES: comando executado e código de saída
-BLOQUEIOS: itens, ou "nenhum"
-PRÓXIMO: etapa sugerida, ou "nenhum"
-```
-
-`aprovado com ressalvas` conta como aprovação; as ressalvas vão para a descrição do PR. Dúvida técnica o subagente decide sozinho e registra como premissa. Dúvida de requisito volta ao humano.
-
-## Anatomia de um arquivo de agente
-
-Cada agente é um arquivo `.md` com duas partes. No topo, entre as linhas `---`, fica o cabeçalho (frontmatter), escrito em YAML: são as configurações que o opencode lê para saber como rodar o agente. Abaixo do cabeçalho vem o corpo, em Markdown, que é o prompt de sistema: as instruções que o modelo recebe sobre o seu papel. O nome do agente vem do nome do arquivo. Como os arquivos estão na pasta `fabrica-software/`, o orquestrador chama o Arquiteto de `fabrica-software/subagent-arquiteto`.
-
-Este é o cabeçalho real do orquestrador, comentado:
-
-```yaml
----
-description: Agente orquestrador do fluxo Fábrica de Software
-mode: primary                            # agente principal, conversa com o humano
-steps: 150                                # máximo de iterações por sessão
-model: 9router-ajudamente/ajudamente-texto # provedor/modelo
-temperature: 0.1                          # quase determinístico: segue regras
-permission:
-  task:                                    # quais subagentes pode acionar
-    "*": deny                                # 1. nenhum, por padrão
-    "fabrica-software/subagent-*": allow     # 2. os seis da fábrica, sim
-    "fabrica-software/subagent-arquiteto": ask  # 3. o Arquiteto pede confirmação
-  edit:                                    # quais arquivos pode alterar
-    "*": deny
-    "specs/*/state.json": allow
-    "specs/*/notes/**": allow
-  bash:                                    # quais comandos de terminal pode rodar
-    "*": allow
-    "git push --force*": deny
-    "git rebase*": deny
-    "gh pr merge*": deny
-    # ...
----
-
-Você é o orquestrador da Fábrica de Software...  # corpo = prompt de sistema
-```
-
-| Campo | O que significa | Nesta fábrica |
-|---|---|---|
-| `description` | Diz o que o agente faz e quando usá-lo. É obrigatório. O modelo lê esse texto para decidir qual subagente chamar. | Uma frase por papel |
-| `mode` | `primary` é um agente que conversa com o usuário; `subagent` só é acionado por outro agente; `all` (padrão) serve aos dois usos. | Orquestrador `primary`; os seis, `subagent` |
-| `model` | Modelo usado, no formato `provedor/modelo`. Se um subagente não define, ele usa o modelo do agente que o acionou. | Só o orquestrador define |
-| `temperature` | Grau de variação das respostas, de 0 a 1. Valores baixos deixam o agente mais previsível; valores altos, mais criativo. | `0.1` no orquestrador |
-| `steps` | Número máximo de iterações (chamadas de ferramenta) antes de o agente ter que parar e responder. Sem o campo, não há limite. | `150` no orquestrador |
-| `permission` | Regras do que o agente pode fazer, por ferramenta. Cada regra vale `allow` (faz sem perguntar), `ask` (pede confirmação ao humano) ou `deny` (bloqueado). | Em todos os agentes |
-| `permission.task` | Quais subagentes este agente pode acionar, pelo nome. | Só no orquestrador |
-| `permission.edit` | Quais arquivos pode criar ou alterar, por caminho. | Restrito em quase todos |
-| `permission.bash` | Quais comandos de terminal pode executar. | Liberado, com git e gh bloqueados |
-
-### Como as regras de permissão são lidas
-
-Os padrões usam curinga: `*` casa com qualquer sequência de caracteres. Quando vários padrões casam com o mesmo pedido, **vale o último da lista**. A ordem importa mais que a especificidade. Por isso a regra geral `"*"` vem primeiro e as exceções depois. Veja o bloco `task` do orquestrador:
-
-| O orquestrador tenta acionar | Regras que casam | Resultado |
-|---|---|---|
-| `fabrica-software/subagent-qa` | 1 (deny), 2 (allow) | **allow**: aciona direto |
-| `fabrica-software/subagent-arquiteto` | 1 (deny), 2 (allow), 3 (ask) | **ask**: o humano confirma antes |
-| `outro-agente` | 1 (deny) | **deny**: bloqueado |
-
-No `bash` é o contrário: tudo liberado e exceções bloqueadas. `git push --force origin main` casa com `"*": allow` e depois com `"git push --force*": deny`; vale o último, então é bloqueado. Se a regra `"*": allow` estivesse no fim da lista, ela liberaria tudo, inclusive o force push.
-
-### O que muda no cabeçalho dos subagentes
-
-Os seis subagentes seguem o mesmo padrão, com três diferenças em relação ao orquestrador: `mode: subagent`, nenhum `model` (herdam o do orquestrador) e um `bash` que bloqueia `git commit`, `git push`, `git merge`, criação de branch e qualquer comando `gh`. O `edit` varia conforme o papel: o Revisor só escreve o `review-report.md` e as notas, e o Criador de Tarefas só o `tasks.md` e as notas. O Desenvolvedor e o QA não têm regra de `edit`, então podem editar qualquer arquivo; o limite do QA (só testes e `qa-report.md`) está apenas no prompt. Isso é bom para discutir em aula: uma regra no prompt depende do modelo obedecer, e uma regra no cabeçalho é aplicada pela ferramenta.
-
-## Permissões de cada papel
-
-As permissões no frontmatter de cada agente reforçam as regras escritas no prompt. Nenhum subagente pode fazer commit, push, merge, criar branch ou usar o `gh`.
-
-| Papel | Pode editar | Git e GitHub |
-|---|---|---|
-| **Orquestrador** | `state.json`, `notes/**` | commit, push, `gh pr create`; bloqueados: merge, force push, rebase, reset --hard |
-| Analista | `specs/**` | sem commit, push ou gh |
-| Arquiteto | `specs/**`, `AGENTS.md` | sem commit, push ou gh; acionamento exige confirmação (`ask`) |
-| Criador de Tarefas | `tasks.md`, `notes/**` | sem commit, push ou gh |
-| Desenvolvedor | código e testes unitários | sem commit, push ou gh |
-| Revisor | `review-report.md`, `notes/**` | sem commit, push ou gh |
-| QA | testes de aceite e `qa-report.md` (regra do prompt) | sem commit, push ou gh |
-
-## Um modelo diferente para cada papel
-
-Separar papéis só protege a entrega se quem verifica pensa de forma diferente de quem produziu. Quando o mesmo modelo escreve o código, revisa o código e testa a entrega, os erros ficam correlacionados: o que ele não enxergou ao implementar, tende a não enxergar ao revisar.
-
-- **Pontos cegos compartilhados.** Se o Desenvolvedor entendeu errado um requisito, um QA com o mesmo modelo tende a ler a spec do mesmo jeito. Ele escreve testes que confirmam o erro, e a suíte passa com um falso positivo.
-- **Preferência pelo próprio estilo.** Modelos costumam avaliar melhor textos e códigos parecidos com os que eles mesmos gerariam. Um Revisor do mesmo modelo aprova com mais facilidade soluções "do seu jeito", mesmo quando há opção mais simples ou segura.
-- **Segregação de funções.** É a mesma lógica de uma equipe humana: quem escreve o PR não aprova o próprio PR. Trocar o modelo é o equivalente a colocar outra pessoa, com outra formação, para revisar.
-
-A diversidade importa mais nos pares em que um papel verifica o trabalho do outro:
-
-| Quem produz | Quem verifica | O que um modelo diferente ajuda a pegar |
-|---|---|---|
-| Desenvolvedor | Revisor | bugs de lógica, falhas de segurança e atalhos que o autor considerou "óbvios" |
-| Desenvolvedor | QA | interpretação errada da spec, casos de borda e entradas inválidas não pensadas |
-| Arquiteto | Criador de Tarefas | passos do plano que não fecham ao virar tarefas concretas |
-| Analista | Arquiteto | requisitos ambíguos que só aparecem na hora de planejar |
-
-Na prática, no opencode, cada agente aceita o campo `model` no frontmatter. Hoje só o `orquestrador.md` define um modelo; os subagentes não definem, então todos herdam o modelo do orquestrador que os aciona. Ou seja, a fábrica atual usa um único modelo para os seis papéis. Basta acrescentar uma linha em cada arquivo:
-
-```yaml
----
-description: Revisor de código da Fábrica de Software ...
-mode: subagent
-model: <provedor>/<modelo-diferente-do-desenvolvedor>
-permission:
-  ...
----
-```
-
-Uma regra simples para começar: o Revisor e o QA usam modelos diferentes do Desenvolvedor e, se possível, diferentes entre si. Diversidade de modelos reduz a correlação entre os erros, mas não a elimina. Ela complementa a verificação no disco, os testes executados e os checkpoints humanos; não substitui nenhum deles.
-
-## Instalação no opencode
-
-### 1. Prepare o repositório do projeto
-
-A fábrica usa obrigatoriamente o Git para criar branches e o GitHub para abrir pull requests. Por isso, o projeto precisa estar publicado em um repositório no GitHub e clonado na máquina; todo o desenvolvimento acontece nesse clone.
-
-- O repositório precisa ter pelo menos um commit na branch base e o remoto `origin` configurado.
-- A CLI `gh` precisa estar autenticada (`gh auth status`).
-- No clone, adicione e inicialize as skills do [GitHub Spec Kit](https://github.com/github/spec-kit) (GHSK) para o opencode e rode `/speckit-constitution` para criar as definições do projeto (`constitution.md`).
-
-O orquestrador confere esses pré-requisitos em E0 e para se algum faltar; ele não roda `git init` nem configura remotos por conta própria.
-
-### 2. Copie os agentes
-
-Os agentes ficam na pasta global do opencode. No Windows, crie a pasta `C:\Users\<usuário>\.config\opencode\agents\fabrica-software` e copie para ela os arquivos `.md` da pasta [`src/`](src/) deste repositório. No PowerShell, a partir da raiz deste repositório:
+O `uv` instala ferramentas Python em ambientes próprios. Foi usado para instalar a CLI do Spec Kit.
 
 ```powershell
-$destino = "$env:USERPROFILE\.config\opencode\agents\fabrica-software"
-New-Item -ItemType Directory -Force $destino | Out-Null
-Copy-Item .\src\*.md $destino
+winget install --id=astral-sh.uv -e
 ```
 
-A pasta deve ficar assim:
+Salve os arquivos, feche as janelas do VS Code e abra o projeto novamente para carregar o caminho dos comandos. Confira a instalação.
+
+```powershell
+uv --version
+```
+
+O resultado esperado é o número da versão do `uv`. [Instalação oficial do uv](https://docs.astral.sh/uv/getting-started/installation/#winget)
+
+### Instalar Codex CLI
+
+A extensão oferece o chat no editor. O CLI fornece o comando `codex` que o Spec Kit procura e que o script usa para chamar os especialistas.
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+```
+
+O comando baixa e executa o instalador oficial. `ExecutionPolicy ByPass` vale para esse processo do PowerShell. Reabra o VS Code após a instalação e confira no novo terminal.
+
+```powershell
+codex --version
+```
+
+O resultado esperado é a versão do Codex CLI. A conversa principal será aberta na extensão, com o login da sua conta. [Instalação oficial do Codex CLI](https://learn.chatgpt.com/docs/codex/cli#getting-started)
+
+### Instalar Spec Kit
+
+```powershell
+uv tool install specify-cli
+specify version
+```
+
+O primeiro comando instala a ferramenta cujo executável se chama `specify`. O segundo consulta a versão. Nesta preparação, a saída mostrou **CLI Version 1.4.3**, Python 3.14.7 e Windows. [Instalação oficial do Spec Kit](https://github.github.io/spec-kit/installation.html#install-from-pypi)
+
+### Inicializar o Spec Kit no projeto
+
+Esta etapa já foi concluída nesta cópia. Para preparar uma pasta pela primeira vez, use o terminal na raiz do projeto.
+
+```powershell
+specify init --here --integration codex --script ps
+```
+
+| Opção | Significado |
+| --- | --- |
+| `--here` | Usa a pasta atual |
+| `--integration codex` | Instala as skills da integração Codex |
+| `--script ps` | Escolhe os scripts PowerShell |
+
+Como a pasta já contém arquivos, o instalador pode apresentar a mensagem abaixo. Confira o diretório e revise o trabalho existente antes de confirmar a mesclagem dos templates.
 
 ```text
-C:\Users\<usuário>\.config\opencode\agents\fabrica-software\
-├── orquestrador.md
-├── subagent-analista-requisitos.md
-├── subagent-arquiteto.md
-├── subagent-criador-tarefas.md
-├── subagent-desenvolvedor.md
-├── subagent-qa.md
-└── subagent-revisor-codigo.md
+Warning: Current directory is not empty (...)
+Template files will be merged with existing content and may overwrite existing files.
+Do you want to continue? [y/N]:
 ```
 
-O nome da subpasta faz parte do nome do agente. É por isso que o orquestrador aciona `fabrica-software/subagent-arquiteto`, e as permissões de `task` só funcionam se a pasta se chamar exatamente `fabrica-software`.
-
-O `orquestrador.md` define `model: 9router-aula/combo-free`. Troque pelo provedor e modelo que você tem configurado no opencode antes de usar.
-
-### 3. Selecione o orquestrador
-
-Reabra o opencode no clone do projeto e selecione o agente `fabrica-software/orquestrador` (tecla `Tab` alterna entre os agentes primários). Todos os prompts a seguir são enviados com ele selecionado.
-
-## Exemplo de uso
-
-O exemplo usa duas demandas sobre um frontend que exibe a data/hora do servidor. A primeira é obrigatória para o exemplo; a segunda é opcional.
-
-### Primeira demanda: especificar
-
-Primeiro prompt:
+Na preparação deste projeto, a primeira tentativa terminou em **codex not found**. A instalação do Codex CLI e a reabertura do VS Code resolveram a detecção. A segunda execução terminou com a saída abaixo, aqui abreviada.
 
 ```text
-@fabrica-software/subagent-analista-requisitos
-Nova feature.
-No frontend a data/hora do servidor deve aparecer no formato pt-br e em cor vermelha. Não precisa ser atualizada e deve usar a timezone America/Sao_Paulo.
+Project ready
+You're already in the project directory!
+Start Codex in this project directory;
+spec-kit skills were installed to .agents/skills
+
+$speckit-constitution
+$speckit-specify
+$speckit-plan
+$speckit-tasks
+$speckit-implement
+$speckit-converge
 ```
 
-O prompt aciona o Analista de Requisitos, que cria a especificação com o GHSK e pode fazer perguntas para esclarecer a demanda. Com o projeto aberto no VS Code, observe que a pasta `specs/` foi criada com a especificação da demanda e que o orquestrador criou a branch da feature.
+**Project ready** confirma a preparação dos arquivos e das skills. A criação de uma feature começa depois, por um pedido seu no chat.
 
-**Opcional.** A qualquer momento antes da aprovação, envie um prompt para ajustar um requisito (o ajuste passa pelo `speckit-clarify`):
+O comando `specify init` é executado no **terminal**. Nomes como `$speckit-constitution` são invocados no **chat do Codex**. Se um projeto já usa Spec Kit com outra integração, a instalação adicional do Codex é feita com `specify integration install codex`. [Integração oficial com Codex](https://github.github.io/spec-kit/integrations/codex.html)
+
+## Criar e aprovar a constituição
+
+A constituição reúne os princípios que os agentes devem seguir durante o trabalho. Nesta fábrica, eles tratam do controle humano, das responsabilidades dos papéis, dos documentos do Spec Kit, da rastreabilidade, das evidências de entrega, dos limites de correção e da integridade do repositório.
+
+### Preparar a proposta
+
+Abra uma nova conversa local na extensão Codex, com a pasta do projeto aberta. A mensagem abaixo foi usada para preparar a constituição atual.
 
 ```text
-Preciso clarificar um requisito na feature.
-A cor vermelha deve ser em tom escuro.
+$speckit-constitution
+
+Leia AGENTS.md, readme.md e os arquivos dos agentes em src/.
+
+Crie a constituição do projeto com base nas regras já documentadas
+para esta fábrica, incluindo responsabilidades dos agentes,
+aprovação humana, rastreabilidade e verificação das entregas.
+
+Trabalhe apenas na preparação da constituição.
+Ao terminar, explique cada princípio para eu revisar e aprender.
 ```
 
-Quando o orquestrador pedir a aprovação (Checkpoint 1), aprove, mas peça para não seguir com o Arquiteto. Uma aprovação simples já faz os próximos subagentes começarem a trabalhar.
+O resultado ficou em [.specify/memory/constitution.md](.specify/memory/constitution.md), como proposta de versão **1.0.0**, com sete princípios, responsabilidades dos papéis, critérios de E0 a E8 e governança. O modelo anterior continha campos genéricos. A proposta atual tem data de adoção pendente e um comentário inicial temporário, chamado `Sync Impact Report`, para apoiar a revisão.
+
+### Aprovar a proposta
+
+Leia o arquivo e confira os princípios. Após concordar com a versão, você pode enviar a mensagem abaixo na mesma conversa do Codex.
 
 ```text
-Aprovo a especificação, mas não siga com o arquiteto.
+$speckit-constitution
+
+Revisei e aprovo a proposta 1.0.0 da constituição.
+Finalize apenas a constituição para esta aprovação.
+
+Registre a data de ratificação de hoje em YYYY-MM-DD,
+atualize a situação e a governança para refletirem a versão aprovada
+e remova o Sync Impact Report temporário antes de salvar a versão final.
+
+Apresente as alterações para eu conferir.
 ```
 
-Ao final, a branch da feature tem um commit com a spec aprovada e o `state.json` fica em `ESPECIFICACAO_APROVADA`.
+Ao final, confira a versão `1.0.0`, a data real no campo `Ratified` e a situação de aprovada. A aprovação da constituição registra a adoção das regras gerais. Cada funcionalidade terá sua própria especificação e aprovação no Checkpoint 1.
 
-### Segunda demanda: especificar a partir da primeira (opcional)
+## Preparar Git e GitHub
 
-Numa nova sessão, envie:
+O fluxo definido no [orquestrador](src/orquestrador.md) usa uma branch por feature e termina com um PR no GitHub. Para isso, a base precisa estar salva em commit, o remoto `origin` deve apontar para um repositório em que você possa publicar e o GitHub CLI precisa estar autenticado.
 
-```text
-@fabrica-software/subagent-analista-requisitos
-Nova feature. No frontend, abaixo da data/hora, apresentar bom dia, boa tarde ou boa noite, de acordo com o momento do dia. Criar uma nova branch a partir da atual. É uma nova feature a partir da implementação da branch atual.
+### Preparar o GitHub CLI
+
+Confira o comando no terminal do VS Code.
+
+```powershell
+gh --version
 ```
 
-Aprove a especificação da mesma forma, sem seguir para o Arquiteto.
+Para instalar no Windows, use o WinGet. Reabra o VS Code ao terminar.
 
-### Executar o backlog
-
-As especificações aprovadas ficam em `specs/` (por exemplo, `001-servidor-timestamp-pt-br` e `002-saudacao-horario`) e formam o backlog ainda não implementado. Há duas formas de implementá-las.
-
-#### Manual
-
-Envie um prompt por spec, com o orquestrador selecionado:
-
-```text
-@fabrica-software/subagent-arquiteto implemente a spec 001-servidor-timestamp-pt-br.
+```powershell
+winget install --id GitHub.cli --source winget
 ```
 
-Espere a primeira spec terminar antes de pedir a segunda, já que a `002` parte da implementação da `001`.
+Faça a autenticação e confira o resultado. Em `gh auth login`, siga o fluxo de login apresentado para sua conta do GitHub.
 
-#### Agendada
+```powershell
+gh auth login
+gh auth status
+```
 
-Instale no opencode o plugin `opencode-scheduler-v2`, adicionando-o ao arquivo de configuração (`opencode.json`):
+O resultado de `gh auth status` deve indicar a conta autenticada. [Instalação do GitHub CLI no Windows](https://github.com/cli/cli/blob/trunk/docs/install_windows.md) · [Autenticação do gh](https://cli.github.com/manual/gh_auth_login)
+
+### Configurar o remoto
+
+Nesta cópia, `git remote` retornou vazio na revisão de 21/11/2026. Crie um repositório vazio na sua conta do GitHub e copie seu endereço HTTPS. O exemplo abaixo contém valores que você deve substituir pelo seu usuário e repositório.
+
+```powershell
+git remote add origin https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
+git remote -v
+```
+
+Em uma cópia que já tenha remoto, confira o destino com `git remote -v` antes de configurar a publicação.
+
+### Salvar a preparação
+
+Depois de finalizar a constituição e revisar a adaptação, salve os arquivos no Git.
+
+```powershell
+git status --short
+git add AGENTS.md readme.md src scripts .agents .specify
+git diff --cached --stat
+git diff --cached --name-only
+git commit -m "docs: adapta fabrica ao Codex e prepara Spec Kit"
+```
+
+Confira a lista de arquivos preparados para o commit. Credenciais reais devem ser armazenadas na configuração local de autenticação ou em variáveis de ambiente.
+
+A base atual é `main`. Publique-a no repositório que você configurou. Em um projeto cuja base tenha outro nome, use o nome correspondente.
+
+```powershell
+git push -u origin main
+git status --short
+```
+
+A saída de `git status --short` deve estar vazia ao iniciar a primeira feature. O orquestrador usa a branch base para criar a branch da funcionalidade.
+
+## Configurar e manter o 9Router disponível
+
+Inicie o 9Router pelo procedimento da sua instalação e mantenha-o disponível durante as delegações. No painel, confira o combo **combo-free** e os modelos que ele pode usar. A estratégia de fallback do combo determina a tentativa do próximo modelo em caso de indisponibilidade. [Projeto 9Router](https://github.com/decolua/9router)
+
+A configuração atual de [src/9router.json](src/9router.json) é a seguinte.
 
 ```json
 {
-  "plugin": [
-    "opencode-scheduler-v2"
-  ]
+  "base_url": "http://localhost:20128/v1",
+  "modelo": "combo-free"
 }
 ```
 
-Reabra o opencode, confirme que o plugin foi carregado e, com o orquestrador selecionado, envie (troque a data e a hora):
+`base_url` é o endereço da API. `modelo` é o nome exato do combo no roteador. Se você mudar o endereço, a porta ou o nome do combo, atualize esses campos.
+
+Quando a autenticação por chave estiver habilitada no 9Router, crie a variável de usuário **FABRICA_9ROUTER_API_KEY** nas configurações de variáveis de ambiente do Windows e reabra o VS Code. O script lê a chave dessa variável. No modo local com autenticação desativada, ele usa um valor de teste quando a variável está vazia.
+
+O nome do combo identifica o roteamento. O custo e as cotas dependem dos modelos e provedores que você incluir. O mesmo combo atende os seis papéis, e diferentes papéis podem ser atendidos pelo mesmo modelo.
+
+## Rodar a primeira feature pelo VS Code
+
+Com a constituição aprovada, a preparação salva e publicada, o `gh` autenticado e o 9Router disponível, abra uma conversa local da extensão Codex na raiz do projeto. O modelo selecionado nessa conversa será o orquestrador.
+
+### Enviar a demanda
+
+Use uma demanda sua ou o exemplo abaixo, baseado na atividade de data e hora do material do professor.
 
 ```text
-/schedule agendar para DD/MM/AAAA às HH:MM:
+Inicie uma feature da fábrica seguindo AGENTS.md e src/orquestrador.md.
 
-Execute as duas especificações abaixo, obrigatoriamente em sequência,
-uma de cada vez.
+Crie uma aplicação web simples que mostre a data e a hora do servidor
+em vermelho, no formato pt-BR e no fuso America/Sao_Paulo.
+A informação deve ser carregada uma vez ao abrir a página.
 
-ORDEM DE EXECUÇÃO:
-
-1. @fabrica-software/subagent-arquiteto
-   Especificação: 001-servidor-timestamp-pt-br
-
-2. @fabrica-software/subagent-arquiteto
-   Especificação: 002-saudacao-horario
-
-REGRAS OBRIGATÓRIAS:
-- Quando tarefas sequenciais, atualizar branch da próxima tarefa com os dados da anterior.
-- Não execute as duas tarefas em paralelo.
-- Inicie a primeira especificação e aguarde sua conclusão integral.
-- Aguarde o subagente retornar o resultado final.
-- Verifique se a implementação foi concluída com sucesso.
-- Somente depois disso, inicie a segunda especificação.
-- A segunda execução deve considerar o estado atualizado do projeto
-  após a primeira implementação.
-- Não inicie a próxima tarefa enquanto a anterior estiver em execução.
-- Se a primeira tarefa falhar, interrompa a sequência e não execute a segunda.
-- Ao final, apresente um relatório individual de cada especificação.
+Pare no Checkpoint 1 para eu revisar a especificação.
 ```
 
-### Resultado final
+O Codex executa a descoberta E0, aciona o Analista pelo 9Router e recebe a especificação. O orquestrador prepara a branch com o nome da feature e registra o estado. Os arquivos esperados ao fim de E1 ficam em `specs/<feature>/`, incluindo `spec.md`, `checklists/requirements.md` e `state.json`. Perguntas de requisito podem voltar para você antes de a spec ficar pronta.
 
-Cada spec percorre a zona autônoma (E2 a E7): Arquiteto, Criador de Tarefas, Desenvolvedor, Revisor de Código e QA. Ao término, o orquestrador abre um pull request por spec, que fica aguardando a aprovação do responsável (Checkpoint 2). Depois de aprovar e fazer o merge, o deploy automático fica a cargo do GitHub Actions, como visto em aula.
+### Revisar e aprovar a especificação
 
-## Roteiro sugerido para a aula
+Abra a `spec.md` indicada pelo Codex e confira o comportamento proposto. Para ajustar o exemplo, você pode escrever “A cor vermelha deve ser em tom escuro”. O orquestrador encaminha o pedido ao Analista por `speckit-clarify` e apresenta a spec atualizada para revisão.
 
-1. **O problema.** Por que um único agente que faz tudo perde o controle em features grandes. *(10 min)*
-2. **Os papéis.** Primeiro diagrama: orquestrador no centro, subagentes nas pontas, humano só nos checkpoints. *(15 min)*
-3. **O fluxo.** Percorrer E0 a E8 no segundo diagrama, parando em cada critério de avanço. *(25 min)*
-4. **As devoluções.** Simular um defeito encontrado pelo QA e seguir a seta de devolução até o PR de novo. *(15 min)*
-5. **Controles de segurança.** Checkpoints, permissões, verificação no disco, limites de rodadas e um modelo diferente para cada papel. *(15 min)*
-6. **Prática.** Rodar a fábrica numa feature pequena e acompanhar o `state.json` mudando. *(30 min)*
+Depois de revisar, a mensagem abaixo autoriza o plano e as etapas técnicas seguintes.
 
-## Perguntas para discussão
+```text
+Aprovo a especificação apresentada. Continue o fluxo da fábrica.
+```
 
-- Por que o commit da spec não pode contar como aprovação do Checkpoint 1?
-- O que poderia dar errado se o Desenvolvedor pudesse editar os testes criados pelo QA?
-- Por que o orquestrador roda os comandos de teste em vez de confiar no relato do subagente?
-- Qual o efeito de limitar a 2 devoluções por etapa e 5 rodadas por feature?
-- Que tipo de dúvida o subagente resolve sozinho, e que tipo precisa voltar ao humano?
-- O que acontece com o bloco `bash` do orquestrador se a linha `"*": allow` for movida para o fim?
-- Quais regras da fábrica estão só no prompt e poderiam ir para o cabeçalho?
-- Se o Desenvolvedor, o Revisor e o QA usam o mesmo modelo, que tipo de erro tem mais chance de chegar ao PR?
+Para guardar a spec aprovada e escolher outro momento para implementar, use a mensagem abaixo.
+
+```text
+Aprovo esta especificação. Pare aqui e aguarde meu pedido para continuar.
+```
+
+Nesse caso, o estado fica em `ESPECIFICACAO_APROVADA`. O orquestrador registra sua mensagem literal para permitir a retomada.
+
+### Acompanhar a implementação
+
+Após a aprovação com continuidade, o Codex coordena o plano, as tarefas, a análise, a implementação por fase, a revisão e o QA. Os especialistas trabalham um de cada vez. O orquestrador executa os comandos de verificação do plano e encaminha as correções a quem é responsável pelo artefato.
+
+Dúvidas técnicas são resolvidas e registradas pelos especialistas. Mudanças de requisito voltam para sua decisão. Há limite de duas devoluções por etapa e cinco rodadas globais de correção por feature, conforme o fluxo.
+
+### Receber o PR e concluir a entrega
+
+Ao concluir as verificações, o orquestrador publica a branch e abre o PR com os resultados, relatórios e pendências. O estado fica em `AGUARDANDO_MERGE`. Você revisa o PR e faz o merge no GitHub.
+
+Em repositórios com CI, o orquestrador acompanha os checks. Se o repositório usa somente verificações locais, essa condição e os resultados ficam documentados no estado e no PR.
+
+Ao retomar a conversa, peça ao Codex para verificar o merge da feature. Ele consulta o GitHub e registra `ENTREGUE` após confirmar o merge.
+
+### Retomar em outra conversa
+
+Abra a mesma pasta e envie o pedido abaixo, substituindo `<feature>` pelo nome real do diretório em `specs/`.
+
+```text
+Retome a feature <feature> a partir do state.json.
+Siga o fluxo de src/orquestrador.md e respeite as aprovações
+e os pedidos de pausa já registrados.
+```
+
+O `state.json` guarda a branch, a etapa, as tarefas concluídas, os artefatos, os comandos de verificação, os contadores e os checkpoints. A retomada continua a primeira etapa pendente.
+
+## Entregas e papéis de cada etapa
+
+| Etapa | Responsável | Skill ou entrega principal |
+| --- | --- | --- |
+| E0 | Codex orquestrador | Conferência dos pré-requisitos e do estado existente |
+| E1 | [Analista](src/subagent-analista-requisitos.md) | `speckit-specify`, `speckit-clarify` e checklists. Entrega `spec.md` |
+| Checkpoint 1 | Você | Revisão e aprovação da especificação |
+| E2 | [Arquiteto](src/subagent-arquiteto.md) | `speckit-plan`. Entrega `plan.md`, `research.md`, `quickstart.md` e artefatos aplicáveis |
+| E3 | [Criador de Tarefas](src/subagent-criador-tarefas.md) | `speckit-tasks`. Entrega `tasks.md` com fases e IDs |
+| E3.5 | Codex orquestrador | `speckit-analyze`. Confere consistência e cobertura dos requisitos |
+| E4 | [Desenvolvedor](src/subagent-desenvolvedor.md) | `speckit-implement`. Entrega código e testes e marca tarefas verificadas com `[X]` |
+| E5 | [Revisor](src/subagent-revisor-codigo.md) | `review-report.md` com achados e parecer |
+| E6 | [QA](src/subagent-qa.md) | Testes de aceite e `qa-report.md` com execução e defeitos |
+| E7 | Codex orquestrador | Branch publicada, PR e resultados da CI ou validação local |
+| E8 / Checkpoint 2 | Você e Codex | Você faz o merge. O Codex confirma e registra a entrega |
+
+`speckit-checklist` complementa as verificações por domínio. `speckit-converge` também foi instalado e serve para avaliar o código e acrescentar trabalho restante como tarefas. O fluxo definido nesta fábrica usa a sequência da tabela e as devoluções descritas no [orquestrador](src/orquestrador.md).
+
+Cada retorno de especialista termina com um bloco de status. `PARECER` é incluído pelo Revisor e pelo QA quando a avaliação foi realizada.
+
+```text
+STATUS: DONE | BLOCKED | NEEDS_CLARIFICATION | HUMAN_REVIEW_REQUIRED
+PARECER: aprovado | aprovado com ressalvas | reprovado
+ARTEFATOS: caminhos dos arquivos criados ou alterados
+TESTES: comandos executados e códigos de saída
+BLOQUEIOS: itens pendentes
+PRÓXIMO: etapa sugerida
+```
+
+Os critérios completos de avanço, de severidade dos achados e de correção estão em `src/orquestrador.md` e na constituição. O fluxo reserva o merge do PR à decisão humana. As operações Git e a publicação são conduzidas pelo orquestrador dentro das regras desses documentos.
+
+## Mensagens encontradas na preparação
+
+| Mensagem | Significado e ação |
+| --- | --- |
+| `uv` não reconhecido | Instale o uv e reabra o VS Code para carregar o caminho do executável |
+| `codex not found` no `specify init` | O Spec Kit procurou o CLI no terminal. Instale o Codex CLI, reabra o VS Code, confira `codex --version` e repita a inicialização |
+| `Current directory is not empty` | O instalador vai mesclar os templates na pasta atual. Confira o diretório e o trabalho existente antes de confirmar |
+| `Project ready` | As skills e os arquivos de apoio foram preparados. Continue pela criação ou revisão da constituição |
+| `TODO(RATIFICATION_DATE)` na constituição | A proposta aguarda aprovação e registro da data real de adoção |
+| Branch ou aprovação incompatível na delegação | O script exige que a feature, a branch, a etapa e a aprovação registrada correspondam ao acionamento pedido pelo orquestrador |
+
+A execução de ponta a ponta será comprovada pela primeira feature com artefatos, testes executados, relatórios e PR. Esses resultados permitirão demonstrar a adaptação na entrega da atividade.
